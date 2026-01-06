@@ -8,6 +8,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
+import numpy as np # Import numpy to handle types if needed
 
 # 1. Setup Rate Limiting
 limiter = Limiter(key_func=get_remote_address)
@@ -117,28 +118,27 @@ def predict_match(data: MatchInput, request: Request):
         print(f"Encoding Error: {e}")
         raise HTTPException(status_code=400, detail="Team encoding failed. Check team names.")
     
-    # --- SAFETY WRAPPER ---
-    # We construct a new DataFrame with the EXACT column names expected by the model.
-    # Model expects: ['home_team_code', 'away_team_code', 'neutral']
-    
+    # Force column names for the model
     features = pd.DataFrame({
         'home_team_code': input_data['home_team_encoded'],
         'away_team_code': input_data['away_team_encoded'],
         'neutral': input_data['neutral_venue']
     })
     
-    # Debug print to server logs
-    print(f"Predicting for: {features}")
+    # Get raw numpy results
+    prediction_raw = model.predict(features)[0]
+    probabilities_raw = model.predict_proba(features)[0]
     
-    prediction = model.predict(features)[0]
-    probabilities = model.predict_proba(features)[0]
+    # --- CONVERT TO STANDARD PYTHON TYPES ---
+    # This fixes the "numpy.int64 is not iterable" error
+    prediction = int(prediction_raw)
     
     return {
         "prediction": prediction,
         "probability": {
-            "draw": round(probabilities[0], 2),
-            "home_win": round(probabilities[1], 2),
-            "away_win": round(probabilities[2], 2)
+            "draw": float(probabilities_raw[0]),     # Convert numpy float to python float
+            "home_win": float(probabilities_raw[1]), # Convert numpy float to python float
+            "away_win": float(probabilities_raw[2])  # Convert numpy float to python float
         },
         "match_info": {
             "home": home_team_str,
