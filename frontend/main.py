@@ -16,13 +16,13 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# 2. ENABLE CORS (The Fix)
+# 2. ENABLE CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (POST, GET, OPTIONS, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 3. Load the Model securely
@@ -99,6 +99,7 @@ def predict_match(data: MatchInput, request: Request):
     home_team_str = data.home_team.value
     away_team_str = data.away_team.value
     
+    # Create DataFrame with initial values
     input_data = pd.DataFrame({
         'home_team': [home_team_str],
         'away_team': [away_team_str],
@@ -117,7 +118,11 @@ def predict_match(data: MatchInput, request: Request):
         print(f"Encoding Error: {e}")
         raise HTTPException(status_code=400, detail="Team encoding failed. Check team names.")
     
+    # --- FIX STARTS HERE ---
+    # We rename the columns to match EXACTLY what the model expects
     features = input_data[['home_team_encoded', 'away_team_encoded', 'neutral_venue']]
+    features.columns = ['home_team_code', 'away_team_code', 'neutral']
+    # --- FIX ENDS HERE ---
     
     prediction = model.predict(features)[0]
     probabilities = model.predict_proba(features)[0]
