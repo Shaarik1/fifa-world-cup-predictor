@@ -8,7 +8,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
-import numpy as np # Import numpy to handle types if needed
+import numpy as np
 
 # 1. Setup Rate Limiting
 limiter = Limiter(key_func=get_remote_address)
@@ -118,27 +118,36 @@ def predict_match(data: MatchInput, request: Request):
         print(f"Encoding Error: {e}")
         raise HTTPException(status_code=400, detail="Team encoding failed. Check team names.")
     
-    # Force column names for the model
     features = pd.DataFrame({
         'home_team_code': input_data['home_team_encoded'],
         'away_team_code': input_data['away_team_encoded'],
         'neutral': input_data['neutral_venue']
     })
     
-    # Get raw numpy results
     prediction_raw = model.predict(features)[0]
     probabilities_raw = model.predict_proba(features)[0]
     
-    # --- CONVERT TO STANDARD PYTHON TYPES ---
-    # This fixes the "numpy.int64 is not iterable" error
-    prediction = int(prediction_raw)
+    # --- TRANSLATOR STARTS HERE ---
+    prediction_int = int(prediction_raw)
     
+    # Define your mapping here. Adjust if your model uses different numbers!
+    # Standard: 1 = Home Win, 2 = Away Win, 0 = Draw
+    label_map = {
+        1: f"{home_team_str} Wins",
+        2: f"{away_team_str} Wins",
+        0: "Draw"
+    }
+    
+    # Get the text, or fallback to the number if unknown
+    prediction_text = label_map.get(prediction_int, f"Result Code: {prediction_int}")
+    # --- TRANSLATOR ENDS HERE ---
+
     return {
-        "prediction": prediction,
+        "prediction": prediction_text,
         "probability": {
-            "draw": float(probabilities_raw[0]),     # Convert numpy float to python float
-            "home_win": float(probabilities_raw[1]), # Convert numpy float to python float
-            "away_win": float(probabilities_raw[2])  # Convert numpy float to python float
+            "draw": float(probabilities_raw[0]),
+            "home_win": float(probabilities_raw[1]),
+            "away_win": float(probabilities_raw[2])
         },
         "match_info": {
             "home": home_team_str,
