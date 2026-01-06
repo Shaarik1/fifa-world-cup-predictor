@@ -5,7 +5,8 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: "http://127.0.0.1:8001/:path*", // Proxy to Docker
+        // MAKE SURE YOU PASTE YOUR REAL RENDER URL BELOW
+        destination: "https://fifa-world-cup-predictor.onrender.com", 
       },
     ];
   },
