@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, Trophy } from "lucide-react";
+import { Loader2, Trophy, AlertCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 const TEAMS = [
@@ -20,16 +20,22 @@ export function MatchPredictor() {
   const [awayTeam, setAwayTeam] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState("");
 
   const handlePredict = async () => {
     if (!homeTeam || !awayTeam) return;
     setLoading(true);
     setResult(null);
+    setError("");
 
     try {
+      // We use the relative path /api/predict which Vercel proxies to Render
       const response = await fetch("/api/predict", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
         body: JSON.stringify({
           home_team: homeTeam,
           away_team: awayTeam,
@@ -37,10 +43,15 @@ export function MatchPredictor() {
         }),
       });
       
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
       const data = await response.json();
       setResult(data);
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (err) {
+      console.error("Prediction failed:", err);
+      setError("Failed to connect to the AI brain. Please try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -95,6 +106,18 @@ export function MatchPredictor() {
           )}
         </button>
 
+        {/* Error Message */}
+        {error && (
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mt-4 p-3 rounded-lg bg-red-500/20 border border-red-500/50 flex items-center gap-2 text-red-200 text-sm"
+            >
+                <AlertCircle className="h-4 w-4" />
+                {error}
+            </motion.div>
+        )}
+
         {/* Results Card */}
         {result && (
           <motion.div 
@@ -110,7 +133,6 @@ export function MatchPredictor() {
               {result.prediction}
             </h3>
             
-            {/* Probability Bars */}
             <div className="grid grid-cols-3 gap-2 mt-4 text-xs text-white/50">
               <div className="flex flex-col gap-1">
                 <span>Home</span>
