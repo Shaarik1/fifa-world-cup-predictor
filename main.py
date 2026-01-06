@@ -6,27 +6,30 @@ from enum import Enum
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import os
 
-# 1. Setup Rate Limiting (Identify users by IP address)
+# 1. Setup Rate Limiting
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# 2. Load the Model securely
-# We try/except to ensure the app doesn't crash if files are missing during build
+# 2. Load the Model securely (Updated Paths)
 try:
-    model = joblib.load("model.pkl")
-    label_encoder = joblib.load("label_encoder.pkl")
+    # Look inside the 'data' folder
+    model_path = os.path.join("data", "rf_model.joblib")
+    encoder_path = os.path.join("data", "team_mapping.joblib")
+    
+    model = joblib.load(model_path)
+    label_encoder = joblib.load(encoder_path)
     print("Security Check: Models loaded successfully.")
 except Exception as e:
     print(f"CRITICAL ERROR: Model files missing. {e}")
-    # In production, you might want to exit here, but for now we pass
+    # We don't exit here so the server can at least start and log the error
     pass
 
 # 3. Define Valid Teams (Whitelist)
-# This prevents "Prompt Injection" or garbage data.
 class TeamName(str, Enum):
     Algeria = "Algeria"
     Argentina = "Argentina"
@@ -69,11 +72,10 @@ class TeamName(str, Enum):
 
 # 4. Input Schema with Validation
 class MatchInput(BaseModel):
-    home_team: TeamName  # Must be in the Enum list above
-    away_team: TeamName  # Must be in the Enum list above
+    home_team: TeamName
+    away_team: TeamName
     neutral_venue: bool = Field(default=False)
 
-    # Custom validator to prevent same-team matches
     @validator('away_team')
     def teams_must_be_different(cls, v, values):
         if 'home_team' in values and v == values['home_team']:
@@ -85,33 +87,38 @@ def home():
     return {"message": "FIFA World Cup AI API (Secured)"}
 
 @app.post("/predict")
-@limiter.limit("10/minute") # Security: Rate Limit to 10 requests per minute per IP
+@limiter.limit("10/minute")
 def predict_match(data: MatchInput, request: Request):
-    # Data is already sanitized and validated by Pydantic at this point
-    
-    # Convert Enum to string for processing
     home_team_str = data.home_team.value
     away_team_str = data.away_team.value
     
-    # Create DataFrame
     input_data = pd.DataFrame({
         'home_team': [home_team_str],
         'away_team': [away_team_str],
         'neutral_venue': [data.neutral_venue]
     })
     
-    # Encode teams
     try:
-        input_data['home_team_encoded'] = label_encoder.transform(input_data['home_team'])
-        input_data['away_team_encoded'] = label_encoder.transform(input_data['away_team'])
-    except ValueError:
-        # Fallback if a team somehow bypassed validation (unlikely with Enum)
-        raise HTTPException(status_code=400, detail="Team not found in training data")
+        # Use the label encoder to transform names to numbers
+        # Note: We use .transform() assuming the encoder is a LabelEncoder
+        # If it was a dictionary map, we would use .map()
+        # Based on your file name 'team_mapping', it might be a dict or encoder.
+        # We will try standard LabelEncoder first.
+        
+        if hasattr(label_encoder, 'transform'):
+            input_data['home_team_encoded'] = label_encoder.transform(input_data['home_team'])
+            input_data['away_team_encoded'] = label_encoder.transform(input_data['away_team'])
+        else:
+            # Fallback if it is a dictionary/map object
+            input_data['home_team_encoded'] = input_data['home_team'].map(label_encoder)
+            input_data['away_team_encoded'] = input_data['away_team'].map(label_encoder)
+            
+    except Exception as e:
+        print(f"Encoding Error: {e}")
+        raise HTTPException(status_code=400, detail="Team encoding failed. Check team names.")
     
-    # Prepare features
     features = input_data[['home_team_encoded', 'away_team_encoded', 'neutral_venue']]
     
-    # Predict
     prediction = model.predict(features)[0]
     probabilities = model.predict_proba(features)[0]
     
