@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/:path*",
-        // MAKE SURE YOU PASTE YOUR REAL RENDER URL BELOW
-        destination: "https://fifa-world-cup-predictor.onrender.com", 
+        // IMPORTANT: Keep the /:path* at the very end of this line!
+        destination: "https://fifa-world-cup-predictor.onrender.com/:path*", 
       },
     ];
   },
