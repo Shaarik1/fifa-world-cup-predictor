@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 import pandas as pd
 import joblib
@@ -15,9 +16,17 @@ app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# 2. Load the Model securely (Updated Paths)
+# 2. ENABLE CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 3. Load the Model securely
 try:
-    # Look inside the 'data' folder
     model_path = os.path.join("data", "rf_model.joblib")
     encoder_path = os.path.join("data", "team_mapping.joblib")
     
@@ -26,10 +35,9 @@ try:
     print("Security Check: Models loaded successfully.")
 except Exception as e:
     print(f"CRITICAL ERROR: Model files missing. {e}")
-    # We don't exit here so the server can at least start and log the error
     pass
 
-# 3. Define Valid Teams (Whitelist)
+# 4. Define Valid Teams
 class TeamName(str, Enum):
     Algeria = "Algeria"
     Argentina = "Argentina"
@@ -70,7 +78,6 @@ class TeamName(str, Enum):
     Uruguay = "Uruguay"
     Uzbekistan = "Uzbekistan"
 
-# 4. Input Schema with Validation
 class MatchInput(BaseModel):
     home_team: TeamName
     away_team: TeamName
@@ -99,17 +106,10 @@ def predict_match(data: MatchInput, request: Request):
     })
     
     try:
-        # Use the label encoder to transform names to numbers
-        # Note: We use .transform() assuming the encoder is a LabelEncoder
-        # If it was a dictionary map, we would use .map()
-        # Based on your file name 'team_mapping', it might be a dict or encoder.
-        # We will try standard LabelEncoder first.
-        
         if hasattr(label_encoder, 'transform'):
             input_data['home_team_encoded'] = label_encoder.transform(input_data['home_team'])
             input_data['away_team_encoded'] = label_encoder.transform(input_data['away_team'])
         else:
-            # Fallback if it is a dictionary/map object
             input_data['home_team_encoded'] = input_data['home_team'].map(label_encoder)
             input_data['away_team_encoded'] = input_data['away_team'].map(label_encoder)
             
@@ -117,7 +117,18 @@ def predict_match(data: MatchInput, request: Request):
         print(f"Encoding Error: {e}")
         raise HTTPException(status_code=400, detail="Team encoding failed. Check team names.")
     
-    features = input_data[['home_team_encoded', 'away_team_encoded', 'neutral_venue']]
+    # --- SAFETY WRAPPER ---
+    # We construct a new DataFrame with the EXACT column names expected by the model.
+    # Model expects: ['home_team_code', 'away_team_code', 'neutral']
+    
+    features = pd.DataFrame({
+        'home_team_code': input_data['home_team_encoded'],
+        'away_team_code': input_data['away_team_encoded'],
+        'neutral': input_data['neutral_venue']
+    })
+    
+    # Debug print to server logs
+    print(f"Predicting for: {features}")
     
     prediction = model.predict(features)[0]
     probabilities = model.predict_proba(features)[0]
