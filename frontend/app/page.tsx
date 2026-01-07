@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <HeroGeometric 
         badge="AI Powered Analytics" 
-        title1="FIFA World Cup 26" 
+        title1="FIFA World Cup" 
         title2="AI Predictor"
     >
         <MatchPredictor />
