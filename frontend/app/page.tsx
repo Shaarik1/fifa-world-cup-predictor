@@ -4,8 +4,8 @@ import { MatchPredictor } from "../src/components/ui/match-predictor";
 export default function Home() {
   return (
     <HeroGeometric 
-        badge="AI Powered Analytics" 
-        title1="FIFA World Cup" 
+        badge="" 
+        title1="FIFA World Cup 26" 
         title2="AI Predictor"
     >
         <MatchPredictor />
