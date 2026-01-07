@@ -130,7 +130,7 @@ def predict_match(data: MatchInput, request: Request):
     # --- TRANSLATOR STARTS HERE ---
     prediction_int = int(prediction_raw)
     
-    # Define your mapping here. Adjust if your model uses different numbers!
+    # Define mapping here. Adjust if model uses different numbers!
     # Standard: 1 = Home Win, 2 = Away Win, 0 = Draw
     label_map = {
         1: f"{home_team_str} Wins",
